@@ -1,0 +1,40 @@
+ql_script - Third-Party Notices and Attribution
+
+This repository contains scripts adapted from upstream open-source projects.
+Please keep this NOTICE file together with relevant license texts when redistributing.
+
+Maintainer / Modifier
+- small-tailqwq
+- Added modification attribution in 2026 where applicable.
+
+Directory-level attribution and license
+
+1) kuro/
+- Upstream: mxyooR/Kuro-autosignin
+- License: GPL-3.0
+- Local license file: kuro/License
+- Notes:
+  - Retains GPL-3.0 license text from upstream.
+  - Modified/adapted for this repository while keeping GPL requirements.
+
+2) skyland/
+- Upstream: xxyz30/skyland-auto-sign (referenced via FancyCabbage mirror in README)
+- License: MIT
+- Local license file: skyland/License
+- Copyright notices kept:
+  - Copyright (c) 2023 xxyz30
+  - Copyright (c) 2026 small-tailqwq
+
+3) zaimanhua/
+- Upstream: qd-today/templates (`再漫画.har`)
+- Upstream license status: no explicit LICENSE file found in upstream repository
+- Upstream statement: templates are for learning/reference and not for commercial use
+- Local license file: zaimanhua/License
+- Local attribution:
+  - Copyright (c) 2026 small-tailqwq
+
+Important
+- Do not remove original copyright and license notices.
+- For GPL-covered parts (kuro/), redistribution of modified versions must continue to comply with GPL-3.0.
+- For `zaimanhua/`, do not treat upstream content as permissively licensed unless upstream provides explicit license terms.
+- This NOTICE is informational and does not replace the full license texts in each directory.

@@ -1,0 +1,13 @@
+Attribution Notice for zaimanhua/
+
+Copyright (c) 2026 small-tailqwq
+
+This directory contains a Python implementation authored by small-tailqwq.
+The request flow is adapted from the template file `再漫画.har` in:
+https://github.com/qd-today/templates
+
+Compliance Notice
+- The upstream repository does not provide an explicit LICENSE file.
+- Upstream README states templates are for learning/reference and not for
+	commercial use.
+- This file is an attribution/compliance note, not an open-source license grant.
