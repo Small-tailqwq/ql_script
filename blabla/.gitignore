@@ -1,0 +1,6 @@
+*.pyc
+__pycache__/
+.blabla_cache/
+ql_blabla_debug.py
+page_snapshot.txt
+task.md
