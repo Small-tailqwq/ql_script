@@ -164,7 +164,7 @@ class BlaSigner:
             return res.get("data", {}).get("commodity_list", [])
         return []
 
-    def exchange_item(self, exchange_id: str, price: int, role_info: dict) -> bool:
+    def exchange_item(self, exchange_id: str, price: int, role_info: dict) -> tuple:
         body = {
             "exchange_commodity_id": exchange_id,
             "exchange_commodity_price": price,
@@ -180,7 +180,8 @@ class BlaSigner:
             "save_role": False,
         }
         res = self._req("POST", "/api/lip/proxy/commodity/Commodity/ExchangeCommodity", json=body)
-        return res.get("code") == 0
+        code = res.get("code")
+        return code == 0, code in (1100010,)
 
     def redeem_rewards(self):
         raw = os.environ.get("BLA_EXCHANGE", "").strip()
@@ -228,12 +229,15 @@ class BlaSigner:
                 self._log(f"[{target}] 积分不足 ({total_points}<{price})，跳过")
                 continue
 
-            ok = self.exchange_item(item["exchange_commodity_id"], price, role_info)
-            if ok:
+            ok, limit_reached = self.exchange_item(item["exchange_commodity_id"], price, role_info)
+            if ok or limit_reached:
                 record[target] = this_month
                 any_exchanged = True
+            if ok:
                 total_points -= price
                 self._log(f"✅ 兑换成功: {target}")
+            elif limit_reached:
+                self._log(f"[{target}] 已达领取上限，跳过")
             else:
                 self._log(f"❌ 兑换失败: {target}")
 
