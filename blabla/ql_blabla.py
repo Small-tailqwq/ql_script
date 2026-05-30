@@ -95,6 +95,36 @@ class BlaSigner:
             return res.get("data", {}).get("total_points", 0)
         return 0
 
+    def get_posts(self, page_size: int = 10) -> list:
+        res = self._req("POST", "/api/ugc/direct/standalonesite/Dynamics/GetPostList",
+                        json={"page_index": 1, "page_size": page_size})
+        if res.get("code") == 0:
+            return res.get("data", {}).get("list", [])
+        return []
+
+    def browse_posts(self, posts: list, need: int) -> int:
+        count = 0
+        for p in posts[:need]:
+            post_id = p.get("dynamics_id") or p.get("post_id") or p.get("id")
+            if not post_id:
+                continue
+            self._req("POST", "/api/ugc/direct/standalonesite/Dynamics/PostPicClickBrowse",
+                      json={"dynamics_id": post_id})
+            count += 1
+        return count
+
+    def like_posts(self, posts: list, need: int) -> int:
+        count = 0
+        for p in posts[:need]:
+            post_id = p.get("dynamics_id") or p.get("post_id") or p.get("id")
+            if not post_id:
+                continue
+            res = self._req("POST", "/api/ugc/proxy/standalonesite/Dynamics/PostStar",
+                            json={"dynamics_id": post_id, "status": 1})
+            if res.get("code") == 0:
+                count += 1
+        return count
+
     def run(self) -> str:
         try:
             if not self.check_login():
@@ -103,6 +133,15 @@ class BlaSigner:
             tasks = self.get_tasks()
             if not tasks:
                 return "\n".join(self.messages)
+
+            posts = None
+            has_browse_or_like = any(
+                t.get("task_type") in (13, 14)
+                and not all(r.get("is_completed", False) for r in t.get("reward_infos", []))
+                for t in tasks
+            )
+            if has_browse_or_like:
+                posts = self.get_posts(10)
 
             for task in tasks:
                 name = task.get("task_name", "")
@@ -116,8 +155,18 @@ class BlaSigner:
 
                 if task_type == 1:
                     self.daily_checkin()
-                elif task_type in (2, 13, 14):
-                    self._log(f"[{name}] 需游戏内/社区完成，跳过")
+                elif task_type == 13 and posts:
+                    need = rewards[0].get("need_completed_times", 5)
+                    done = self.browse_posts(posts, need)
+                    self._log(f"[{name}] 浏览贴文 ({done}/{need})")
+                elif task_type == 14 and posts:
+                    need = rewards[0].get("need_completed_times", 5)
+                    done = self.like_posts(posts, need)
+                    self._log(f"[{name}] 点赞贴文 ({done}/{need})")
+                elif task_type == 2:
+                    self._log(f"[{name}] 需游戏内完成，跳过")
+                else:
+                    self._log(f"[{name}] 未知任务类型，跳过")
 
             self.total_points = self.get_total_points()
             self._log(f"当前总积分: {self.total_points}")
