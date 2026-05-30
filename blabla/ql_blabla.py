@@ -141,10 +141,10 @@ class BlaSigner:
                 else:
                     self._log(f"[{name}] 未知任务类型，跳过")
 
+            self.redeem_rewards()
+
             self.total_points = self.get_total_points()
             self._log(f"当前总积分: {self.total_points}")
-
-            self.redeem_rewards()
         except Exception as e:
             self._log(f"执行异常: {str(e)}")
             self.success = False
@@ -163,12 +163,21 @@ class BlaSigner:
             return res.get("data", {}).get("commodity_list", [])
         return []
 
-    def exchange_item(self, exchange_id: str, game_id: str, role_info: dict) -> bool:
-        body = {"exchange_commodity_id": exchange_id, "commodity_num": 1, "game_id": game_id}
-        if role_info.get("area_id"):
-            body["area_id"] = role_info["area_id"]
-        if role_info.get("role_id"):
-            body["role_id"] = role_info["role_id"]
+    def exchange_item(self, exchange_id: str, price: int, role_info: dict) -> bool:
+        body = {
+            "exchange_commodity_id": exchange_id,
+            "exchange_commodity_price": price,
+            "role_info": {
+                "area_id": role_info.get("area_id", ""),
+                "game_id": role_info.get("game_id", "29080"),
+                "game_name": role_info.get("game_name", "nikke_global"),
+                "plat_id": role_info.get("plat_id", "0"),
+                "role_id": role_info.get("role_id", ""),
+                "role_name": role_info.get("role_name", ""),
+                "zone_id": role_info.get("zone_id", "0"),
+            },
+            "save_role": False,
+        }
         res = self._req("POST", "/api/lip/proxy/commodity/Commodity/ExchangeCommodity", json=body)
         return res.get("code") == 0
 
@@ -188,18 +197,16 @@ class BlaSigner:
             self._log("未找到角色信息，跳过兑换")
             return
 
-        name_to_id = {c["commodity_name"]: c["exchange_commodity_id"] for c in commodity_list}
+        cid_map = {c["commodity_name"]: c for c in commodity_list}
 
         for target in targets:
-            if target in name_to_id:
-                exchange_id = name_to_id[target]
-                ok = self.exchange_item(exchange_id, "29080", role_info)
-                if ok:
-                    self._log(f"兑换成功: {target}")
-                else:
-                    self._log(f"兑换失败: {target}")
-            else:
+            item = cid_map.get(target)
+            if not item:
                 self._log(f"未找到商品: {target}")
+                continue
+            ok = self.exchange_item(item["exchange_commodity_id"], item["commodity_price"], role_info)
+            msg = "兑换成功" if ok else "兑换失败"
+            self._log(f"{'✅' if ok else '❌'} {msg}: {target}")
 
 
 def check_cookie_valid(cookie: str) -> bool:
