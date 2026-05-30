@@ -10,6 +10,7 @@ import logging
 import os
 import random
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 import requests
@@ -26,7 +27,7 @@ except Exception:
 TIMEOUT = 30
 API_BASE = "https://api.blablalink.com"
 LOGIN_API = "https://nikke-cdk-test.hayasa.org/api/login"
-CACHE_DIR = Path(os.environ.get("BLA_CACHE_DIR", "")) or Path(__file__).parent / ".blabla_cache"
+CACHE_DIR = Path(os.environ.get("BLA_CACHE_DIR") or Path(__file__).parent / ".blabla_cache")
 
 HEADERS = {
     "x-channel-type": "2",
@@ -187,6 +188,17 @@ class BlaSigner:
             return
         targets = [x.strip() for x in raw.replace("，", ",").split(",") if x.strip()]
 
+        cache_key = hashlib.md5(self.cookie_str.encode()).hexdigest()[:16]
+        cache_file = CACHE_DIR / f"exchange_{cache_key}.json"
+        this_month = datetime.now().strftime("%Y-%m")
+
+        record = {}
+        if cache_file.exists():
+            try:
+                record = json.loads(cache_file.read_text(encoding="utf-8"))
+            except Exception:
+                record = {}
+
         commodity_list = self.get_commodity_list()
         if not commodity_list:
             self._log("获取商品列表失败，跳过兑换")
@@ -198,15 +210,36 @@ class BlaSigner:
             return
 
         cid_map = {c["commodity_name"]: c for c in commodity_list}
+        total_points = self.get_total_points()
+        any_exchanged = False
 
         for target in targets:
             item = cid_map.get(target)
             if not item:
                 self._log(f"未找到商品: {target}")
                 continue
-            ok = self.exchange_item(item["exchange_commodity_id"], item["commodity_price"], role_info)
-            msg = "兑换成功" if ok else "兑换失败"
-            self._log(f"{'✅' if ok else '❌'} {msg}: {target}")
+
+            if record.get(target) == this_month:
+                self._log(f"[{target}] 本月已兑换，跳过")
+                continue
+
+            price = item["commodity_price"]
+            if total_points < price:
+                self._log(f"[{target}] 积分不足 ({total_points}<{price})，跳过")
+                continue
+
+            ok = self.exchange_item(item["exchange_commodity_id"], price, role_info)
+            if ok:
+                record[target] = this_month
+                any_exchanged = True
+                total_points -= price
+                self._log(f"✅ 兑换成功: {target}")
+            else:
+                self._log(f"❌ 兑换失败: {target}")
+
+        if any_exchanged:
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
 
 
 def check_cookie_valid(cookie: str) -> bool:
