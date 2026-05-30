@@ -113,12 +113,27 @@ class BlaSigner:
 
     def run(self) -> str:
         try:
+            done_key = hashlib.md5(self.cookie_str.encode()).hexdigest()[:16]
+            done_file = CACHE_DIR / f"done_{done_key}.json"
+            today = datetime.now().strftime("%Y-%m-%d")
+
+            if done_file.exists():
+                try:
+                    done_data = json.loads(done_file.read_text(encoding="utf-8"))
+                    if done_data.get("date") == today:
+                        self._log("今日任务已全部完成，跳过")
+                        return "\n".join(self.messages)
+                except Exception:
+                    pass
+
             if not self.check_login():
                 return "\n".join(self.messages)
 
             tasks = self.get_tasks()
             if not tasks:
                 return "\n".join(self.messages)
+
+            all_completed = True
 
             for task in tasks:
                 name = task.get("task_name", "")
@@ -130,6 +145,8 @@ class BlaSigner:
                 if is_completed:
                     self._log(f"[{name}] 已完成")
                     continue
+
+                all_completed = False
 
                 if task_type == 1:
                     self.daily_checkin()
@@ -146,6 +163,10 @@ class BlaSigner:
 
             self.total_points = self.get_total_points()
             self._log(f"当前总积分: {self.total_points}")
+
+            if self.success and all_completed:
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                done_file.write_text(json.dumps({"date": today}), encoding="utf-8")
         except Exception as e:
             self._log(f"执行异常: {str(e)}")
             self.success = False
@@ -282,7 +303,6 @@ def login_via_worker(email: str, password: str) -> str:
         msg = data.get("message", "") or ""
         if "machine" in msg.lower() or "captcha" in msg.lower() or "验证" in msg or "滑块" in msg:
             logging.error(f"[{note}] 需要验证码，请手动获取 Cookie 后设置 BLA_COOKIE")
-            logging.error(f"[{note}] 打开 https://nikke-cdk-test.hayasa.org/ 登录并解决验证码，将返回的 Cookie 填入 BLA_COOKIE")
         else:
             logging.error(f"[{note}] Worker 登录失败: {msg}")
     except Exception as e:
@@ -297,7 +317,7 @@ def get_credentials() -> List[Dict[str, str]]:
 
     ck_list = []
     if raw_cookie:
-        raw_cookie = raw_cookie.replace("&", "\n").replace(",", "\n")
+        raw_cookie = raw_cookie.replace("\\n", "\n").replace("&", "\n").replace(",", "\n")
         for line in raw_cookie.split("\n"):
             line = line.strip()
             if not line:
@@ -305,43 +325,57 @@ def get_credentials() -> List[Dict[str, str]]:
             parts = line.split("#", 1)
             cookie_val = parts[0].strip()
             note = parts[1].strip() if len(parts) > 1 else ""
+
+            if len(parts) > 1 and "=" not in parts[0] and "=" in parts[1]:
+                cookie_val, note = parts[1].strip(), parts[0].strip()
+
             if cookie_val:
                 ck_list.append({"cookie": cookie_val, "note": note})
 
     if raw_account:
-        raw_account = raw_account.replace("&", "\n").replace(",", "\n")
-        for idx, line in enumerate(raw_account.split("\n")):
-            line = line.strip()
-            if not line:
-                continue
+        raw_account = raw_account.replace("\\n", "\n").replace("&", "\n").replace(",", "\n")
+        acc_lines = [l.strip() for l in raw_account.split("\n") if l.strip()]
+        used_ck = set()
+
+        for idx, line in enumerate(acc_lines):
             parts = line.split("#")
             email = parts[0].strip()
             password = parts[1].strip() if len(parts) > 1 else ""
-            note = parts[2].strip() if len(parts) > 2 else (ck_list[idx]["note"] if idx < len(ck_list) and ck_list[idx]["note"] else f"账号{len(cookies) + 1}")
+            note = parts[2].strip() if len(parts) > 2 else f"账号{len(cookies) + 1}"
             if not email or not password:
                 continue
 
-            pre_cached = False
-            if idx < len(ck_list):
-                manual = ck_list[idx]["cookie"]
-                if check_cookie_valid(manual):
-                    key = hashlib.md5(email.encode()).hexdigest()[:16]
-                    cache_file = CACHE_DIR / key
-                    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-                    cache_file.write_text(manual, encoding="utf-8")
-                    cookies.append({"cookie": manual, "note": note})
-                    logging.info(f"✅ [{email.split('@')[0]}] BLA_COOKIE 已缓存，跳过登录")
-                    pre_cached = True
+            matched = None
+            for ci, ck in enumerate(ck_list):
+                if ci not in used_ck and ck["note"] == email:
+                    matched = ck
+                    used_ck.add(ci)
+                    break
 
-            if not pre_cached:
-                logging.info(f"正在通过 Worker 登录: {email}")
-                cookie = login_via_worker(email, password)
-                if cookie:
-                    cookies.append({"cookie": cookie, "note": note})
+            if matched is None and idx < len(ck_list) and idx not in used_ck:
+                matched = ck_list[idx]
+                if "@" in matched["note"] and matched["note"] != email:
+                    matched = None
+                else:
+                    used_ck.add(idx)
+
+            if matched and check_cookie_valid(matched["cookie"]):
+                key = hashlib.md5(email.encode()).hexdigest()[:16]
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                (CACHE_DIR / key).write_text(matched["cookie"], encoding="utf-8")
+                cookies.append({"cookie": matched["cookie"], "note": note})
+                logging.info(f"✅ [{email.split('@')[0]}] BLA_COOKIE 已缓存，跳过登录")
+                continue
+
+            logging.info(f"正在通过 Worker 登录: {email}")
+            cookie = login_via_worker(email, password)
+            if cookie:
+                cookies.append({"cookie": cookie, "note": note})
 
     acct_count = len([l for l in raw_account.replace("&", "\n").replace(",", "\n").split("\n") if l.strip()]) if raw_account else 0
     for i in range(acct_count, len(ck_list)):
-        cookies.append({"cookie": ck_list[i]["cookie"], "note": ck_list[i]["note"] or f"账号{len(cookies) + 1}"})
+        if i not in used_ck:
+            cookies.append({"cookie": ck_list[i]["cookie"], "note": ck_list[i]["note"] or f"账号{len(cookies) + 1}"})
 
     return cookies
 

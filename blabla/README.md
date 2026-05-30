@@ -19,13 +19,15 @@ BLA_COOKIE="token1 # 小号\ntoken2 # 大号"
 ### 方式二：通过 Worker 登录（自动获取 Cookie）
 
 ```
-BLA_ACCOUNT="邮箱#密码"
+BLA_ACCOUNT="邮箱#密码#备注"
 ```
 
 多账号：
 
 ```
 BLA_ACCOUNT="邮箱1#密码1#备注1\n邮箱2#密码2#备注2"
+
+*：青龙面板直接在环境变量回车代替`\n`就行
 ```
 
 脚本会调用 `https://nikke-cdk-test.hayasa.org/api/login` 获取 Cookie，并自动缓存到 `.blabla_cache/` 目录。下次运行优先使用缓存，失效后自动重新登录。
@@ -76,13 +78,14 @@ BLA_ACCOUNT="邮箱#密码"
 
 BLA_COOKIE 和 BLA_ACCOUNT 按顺序一一对应（第1条 Cookie ↔ 第1个邮箱，第2条 ↔ 第2个，以此类推）。
 
+**BLA_COOKIE 支持两种格式：**
+
+1. 纯 Cookie：`game_token=xxx; game_openid=yyy`（记得 URL 编码 `&` → `%26`）
+2. `邮箱#Cookie`：自动识别 `@` 前邮箱、`=` 后 Cookie 并交换
+
 **手动补救流程：**
 
-1. 打开浏览器访问 `https://nikke-cdk-test.hayasa.org/`
-2. 输入邮箱密码正常登录，完成滑块验证
-3. 登录成功后页面会显示 Cookie 字符串
-4. 将该字符串设置到 `BLA_COOKIE`，同时保留 `BLA_ACCOUNT`
-5. 脚本检测到 Cookie 有效后，自动写入邮箱缓存，后续运行不再触发验证码
+Worker 端点为纯 API，不支持浏览器直接访问。触发验证码时，需通过其他方式获取有效 Cookie 后设到 `BLA_COOKIE`，脚本会自动缓存到对应邮箱名下。或者直接使用 [Nikke-CDK-Tool](https://github.com/Small-tailqwq/Nikke-CDK-Tool) 来完成你的任务
 
 ## 缓存目录
 

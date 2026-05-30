@@ -8,3 +8,4 @@
 - `kuro/` 目录遵循 GPL-3.0，保留原项目许可证文本。
 - `skyland/` 目录遵循 MIT，保留原作者版权声明并追加修改署名。
 - `zaimanhua/` 目录基于 `qd-today/templates` 的 `再漫画.har` 规则改写；上游仓库未提供明确 LICENSE，请按其 README 声明仅用于学习交流与非商业用途，详见 `zaimanhua/README.md` 与 `NOTICE`。
+- `blabla/` 基于 MIT 协议，自己用 AI 搓的
