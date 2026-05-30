@@ -23,6 +23,7 @@ except Exception:
 
 TIMEOUT = 30
 API_BASE = "https://api.blablalink.com"
+LOGIN_API = "https://nikke-cdk-test.hayasa.org/api/login"
 
 HEADERS = {
     "x-channel-type": "2",
@@ -145,39 +146,71 @@ class BlaSigner:
         return "\n".join(self.messages)
 
 
-def get_cookies() -> List[Dict[str, str]]:
-    raw = os.environ.get("BLA_COOKIE", "").strip()
-    if not raw:
-        return []
+def login_via_worker(email: str, password: str) -> str:
+    try:
+        resp = requests.post(LOGIN_API, json={"email": email, "password": password}, timeout=TIMEOUT)
+        data = resp.json()
+        if data.get("code") == 0:
+            cookie = data.get("data", {}).get("cookie", "")
+            if cookie:
+                logging.info(f"✅ Worker 登录成功: {data['data'].get('userName', '')}")
+                return cookie
+        logging.error(f"Worker 登录失败: {data.get('message', '未知错误')}")
+    except Exception as e:
+        logging.error(f"Worker 登录请求异常: {str(e)}")
+    return ""
 
-    raw = raw.replace("&", "\n").replace(",", "\n")
-    cookie_list = []
-    for line in raw.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        parts = line.split("#", 1)
-        cookie_val = parts[0].strip()
-        note = parts[1].strip() if len(parts) > 1 else f"账号{len(cookie_list) + 1}"
-        if cookie_val:
-            cookie_list.append({"cookie": cookie_val, "note": note})
-    return cookie_list
+
+def get_credentials() -> List[Dict[str, str]]:
+    cookies = []
+    raw_cookie = os.environ.get("BLA_COOKIE", "").strip()
+    raw_account = os.environ.get("BLA_ACCOUNT", "").strip()
+
+    if raw_cookie:
+        raw_cookie = raw_cookie.replace("&", "\n").replace(",", "\n")
+        for line in raw_cookie.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("#", 1)
+            cookie_val = parts[0].strip()
+            note = parts[1].strip() if len(parts) > 1 else f"账号{len(cookies) + 1}"
+            if cookie_val:
+                cookies.append({"cookie": cookie_val, "note": note})
+
+    if raw_account:
+        raw_account = raw_account.replace("&", "\n").replace(",", "\n")
+        for line in raw_account.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split("#")
+            email = parts[0].strip()
+            password = parts[1].strip() if len(parts) > 1 else ""
+            note = parts[2].strip() if len(parts) > 2 else f"账号{len(cookies) + 1}"
+            if email and password:
+                logging.info(f"正在通过 Worker 登录: {email}")
+                cookie = login_via_worker(email, password)
+                if cookie:
+                    cookies.append({"cookie": cookie, "note": note})
+
+    return cookies
 
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
-    cookies = get_cookies()
-    if not cookies:
-        logging.error("未找到 Cookie，请在环境变量中设置 'BLA_COOKIE'。")
+    credentials = get_credentials()
+    if not credentials:
+        logging.error("未找到凭证，请设置环境变量 'BLA_COOKIE' 或 'BLA_ACCOUNT'（邮箱#密码）。")
         return
 
-    logging.info(f"✅ 检测到 {len(cookies)} 个账号，开始执行 Blabla Link 每日签到...\n" + "-" * 30)
+    logging.info(f"✅ 检测到 {len(credentials)} 个账号，开始执行 Blabla Link 每日签到...\n" + "-" * 30)
 
     notify_content = []
     all_success = True
-    for cookie_data in cookies:
-        signer = BlaSigner(cookie_data)
+    for cred in credentials:
+        signer = BlaSigner(cred)
         result_msg = signer.run()
         status_icon = "✅" if signer.success else "❌"
         if not signer.success:
