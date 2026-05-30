@@ -95,34 +95,15 @@ class BlaSigner:
             return res.get("data", {}).get("total_points", 0)
         return 0
 
-    def get_posts(self, page_size: int = 10) -> list:
-        res = self._req("POST", "/api/ugc/direct/standalonesite/Dynamics/GetPostList",
-                        json={"page_index": 1, "page_size": page_size})
-        if res.get("code") == 0:
-            return res.get("data", {}).get("list", [])
-        return []
-
-    def browse_posts(self, posts: list, need: int) -> int:
+    def complete_task(self, task_id: str, need: int, min_delay: float = 1.0, max_delay: float = 3.0) -> int:
         count = 0
-        for p in posts[:need]:
-            post_uuid = p.get("post_uuid")
-            if not post_uuid:
-                continue
-            self._req("POST", "/api/ugc/direct/standalonesite/Dynamics/PostPicClickBrowse",
-                      json={"post_uuid": post_uuid})
-            count += 1
-        return count
-
-    def like_posts(self, posts: list, need: int) -> int:
-        count = 0
-        for p in posts[:need]:
-            post_uuid = p.get("post_uuid")
-            if not post_uuid:
-                continue
-            res = self._req("POST", "/api/ugc/proxy/standalonesite/Dynamics/PostStar",
-                            json={"post_uuid": post_uuid, "status": 1})
+        for i in range(need):
+            res = self._req("POST", "/api/lip/proxy/lipass/Points/CompleteTaskAddPoint",
+                            json={"task_id": task_id, "intl_game_id": "29080"})
             if res.get("code") == 0:
                 count += 1
+            if i < need - 1:
+                time.sleep(random.uniform(min_delay, max_delay))
         return count
 
     def run(self) -> str:
@@ -134,18 +115,10 @@ class BlaSigner:
             if not tasks:
                 return "\n".join(self.messages)
 
-            posts = None
-            has_like = any(
-                t.get("task_type") == 14
-                and not all(r.get("is_completed", False) for r in t.get("reward_infos", []))
-                for t in tasks
-            )
-            if has_like:
-                posts = self.get_posts(10)
-
             for task in tasks:
                 name = task.get("task_name", "")
                 task_type = task.get("task_type")
+                task_id = task.get("task_id")
                 rewards = task.get("reward_infos", [])
                 is_completed = all(r.get("is_completed", False) for r in rewards)
 
@@ -155,12 +128,10 @@ class BlaSigner:
 
                 if task_type == 1:
                     self.daily_checkin()
-                elif task_type == 13:
-                    self._log(f"[{name}] 浏览 API 已调但任务不更新，需调查")
-                elif task_type == 14 and posts:
+                elif task_type in (13, 14) and task_id:
                     need = rewards[0].get("need_completed_times", 5)
-                    done = self.like_posts(posts, need)
-                    self._log(f"[{name}] 点赞贴文 ({done}/{need})")
+                    done = self.complete_task(task_id, need)
+                    self._log(f"[{name}] ({done}/{need})")
                 elif task_type == 2:
                     self._log(f"[{name}] 需游戏内完成，跳过")
                 else:
