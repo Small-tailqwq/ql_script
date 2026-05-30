@@ -4,11 +4,13 @@ cron: 30 8 * * *
 new Env('Blabla Link 每日签到');
 """
 
+import hashlib
 import json
 import logging
 import os
 import random
 import time
+from pathlib import Path
 from typing import Dict, List
 import requests
 import re
@@ -24,6 +26,7 @@ except Exception:
 TIMEOUT = 30
 API_BASE = "https://api.blablalink.com"
 LOGIN_API = "https://nikke-cdk-test.hayasa.org/api/login"
+CACHE_DIR = Path(os.environ.get("BLA_CACHE_DIR", "")) or Path(__file__).parent / ".blabla_cache"
 
 HEADERS = {
     "x-channel-type": "2",
@@ -146,18 +149,42 @@ class BlaSigner:
         return "\n".join(self.messages)
 
 
+def check_cookie_valid(cookie: str) -> bool:
+    try:
+        resp = requests.post(f"{API_BASE}/api/user/CheckLogin",
+                             data="{}",
+                             headers={"Cookie": cookie, "Content-Type": "application/json"},
+                             timeout=10)
+        return resp.json().get("code") == 0
+    except Exception:
+        return False
+
+
 def login_via_worker(email: str, password: str) -> str:
+    key = hashlib.md5(email.encode()).hexdigest()[:16]
+    cache_file = CACHE_DIR / key
+    note = email.split("@")[0]
+
+    if cache_file.exists():
+        cookie = cache_file.read_text(encoding="utf-8").strip()
+        if cookie and check_cookie_valid(cookie):
+            logging.info(f"✅ [{note}] Cookie 缓存有效，跳过登录")
+            return cookie
+        logging.info(f"[{note}] Cookie 缓存已失效，重新登录")
+
     try:
         resp = requests.post(LOGIN_API, json={"email": email, "password": password}, timeout=TIMEOUT)
         data = resp.json()
         if data.get("code") == 0:
             cookie = data.get("data", {}).get("cookie", "")
             if cookie:
-                logging.info(f"✅ Worker 登录成功: {data['data'].get('userName', '')}")
+                CACHE_DIR.mkdir(parents=True, exist_ok=True)
+                cache_file.write_text(cookie, encoding="utf-8")
+                logging.info(f"✅ [{note}] Worker 登录成功，Cookie 已缓存")
                 return cookie
-        logging.error(f"Worker 登录失败: {data.get('message', '未知错误')}")
+        logging.error(f"[{note}] Worker 登录失败: {data.get('message', '未知错误')}")
     except Exception as e:
-        logging.error(f"Worker 登录请求异常: {str(e)}")
+        logging.error(f"[{note}] Worker 登录请求异常: {str(e)}")
     return ""
 
 
