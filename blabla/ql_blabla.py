@@ -279,7 +279,12 @@ def login_via_worker(email: str, password: str) -> str:
                 cache_file.write_text(cookie, encoding="utf-8")
                 logging.info(f"✅ [{note}] Worker 登录成功，Cookie 已缓存")
                 return cookie
-        logging.error(f"[{note}] Worker 登录失败: {data.get('message', '未知错误')}")
+        msg = data.get("message", "") or ""
+        if "machine" in msg.lower() or "captcha" in msg.lower() or "验证" in msg or "滑块" in msg:
+            logging.error(f"[{note}] 需要验证码，请手动获取 Cookie 后设置 BLA_COOKIE")
+            logging.error(f"[{note}] 打开 https://nikke-cdk-test.hayasa.org/ 登录并解决验证码，将返回的 Cookie 填入 BLA_COOKIE")
+        else:
+            logging.error(f"[{note}] Worker 登录失败: {msg}")
     except Exception as e:
         logging.error(f"[{note}] Worker 登录请求异常: {str(e)}")
     return ""
