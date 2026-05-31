@@ -140,7 +140,7 @@ class BlaSigner:
                 task_type = task.get("task_type")
                 task_id = task.get("task_id")
                 rewards = task.get("reward_infos", [])
-                is_completed = all(r.get("is_completed", False) for r in rewards)
+                is_completed = bool(rewards) and all(r.get("is_completed", False) for r in rewards)
 
                 if is_completed:
                     self._log(f"[{name}] 已完成")
